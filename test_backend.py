@@ -26,13 +26,18 @@ import logging
 from flask import Flask, request
 from flask_cors import CORS
 from flask_restful import Api, reqparse
+import openai
+import os
+
+openai.api_key = os.environ["OPENAI_API_KEY"]
+model_engine = "gpt-3.5-turbo"
 
 # set up the Flask app
 app = Flask(__name__)
 CORS(app)
 api = Api(app)
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = app.logger
 
 
@@ -46,7 +51,8 @@ req_parser.add_argument("turn_id", type=int, location='json',
                         help='Turn number in the dialog')
 req_parser.add_argument("user_naturalness_rating", type=int, location='json')
 req_parser.add_argument("user_factuality_rating", type=bool, location='json')
-req_parser.add_argument("user_factuality_confidence", type=int, location='json')
+req_parser.add_argument("user_factuality_confidence",
+                        type=int, location='json')
 req_parser.add_argument("new_user_utterance", type=str,
                         location='json', help='The new user utterance')
 req_parser.add_argument("system_name", type=str, location='json',
@@ -55,10 +61,46 @@ req_parser.add_argument("system_name", type=str, location='json',
 # arguments for when a user makes a head-to-head comparison
 req_parser.add_argument("winner_system", type=str, location='json',
                         help='The system that was preferred by the user in the current dialog turn')
-req_parser.add_argument("loser_systems", type=list, location='json',
+req_parser.add_argument("loser_systems", type=str, location='json',
                         help='The system that was not preferred by the user in the current dialog turn')
 
 
+low_extrovert = '''Let the role play begin. You are a very low extrovert.
+
+The characteristics of a low extroverted person are listed below.
+- You are not the life of the party.
+- You don't feel comfortable around people.
+- You don't talk to a lot of different people at parties.
+- You don't like being the center of attention.
+- You do not talk a lot.
+- You keep in the background.
+- You have little to say.
+- You do not like to draw attention to myself.
+- You are quiet around strangers.
+
+You are to converse with me as a person of the above characteristics. 
+You do not know my personality, so do not mention it.
+'''
+
+high_extrovert = '''Let the role play begin. You are a very high extrovert.
+
+The characteristics of a low extroverted person are listed below.
+- You are the life of the party.
+- You feel comfortable around people.
+- You start conversations.
+- You talk to a lot of different people at parties.
+- You do not mind being the center of attention.
+- You talk a lot.
+- You don't keep in the background.
+- You have a lot to say.
+- You like to draw attention to myself.
+- You are not quiet around strangers.
+
+You are to converse with me as a person of the above characteristics. 
+You do not know my personality, so do not mention it.
+'''
+
+normal = ""
 @app.route("/chat", methods=["POST"])
 def chat():
     """
@@ -74,9 +116,17 @@ def chat():
     dialog_id = request_args['dialog_id']
     turn_id = request_args['turn_id']
     system_name = request_args['system_name']
+    response = openai.ChatCompletion.create(
+        model=model_engine,
+        messages=[
+            {"role": "system", "content": low_extrovert},
+            {"role": "user", "content": new_user_utterance}
+        ]
+    )
+    output_text = response.choices[0].message.content
 
     logger.info('request from IP address %s', str(request.remote_addr))
-    return {'agent_utterance': 'Sample agent utterance. experiment_id=%s, new_user_utterance=%s, dialog_id=%s, turn_id=%d, system_name=%s' % (experiment_id, new_user_utterance, dialog_id, turn_id, system_name), 'log_object': {'log object parameter 1': 'log object value 1'}}
+    return {'agent_utterance': output_text}
 
 
 @app.route("/user_rating", methods=["POST"])
@@ -120,7 +170,7 @@ def user_preference():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=5002, debug=True, use_reloader=False)
 
 
 # Example curl command for testing:
